@@ -122,7 +122,7 @@ const QuizScreen = ({ route }) => {
         );
 
         const quizQuerySnapshot = await getDocs(quizQuery);
-        const scores = quizQuerySnapshot.docs[0].data().scores?.[userEmail];
+        const scores = quizQuerySnapshot.docs[0]?.data()?.scores?.[userEmail] ?? [];
         setUserScores(scores);
         console.log("scores: ", scores);
         console.log("userScores: ", userScores);
@@ -548,7 +548,7 @@ const QuizScreen = ({ route }) => {
                 </Box>
               )}
 
-              {userScores && userScores.length > 0 ? (
+              {Array.isArray(userScores) && userScores.length > 0 ? (
                 userScores.slice().reverse().map((scoreEntry, index) => (
                   <Box
                     key={index}
