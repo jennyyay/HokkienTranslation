@@ -56,6 +56,7 @@ const QuizScreen = ({ route }) => {
   const [hokkienOption, setHokkienOption] = useState("Romanization");
   const [optionType, setOptionType] = useState("English");
   const [errorMessage, setErrorMessage] = useState(null);
+  const [retakeIncorrectOnly, setRetakeIncorrectOnly] = useState(false);
 
   const flashcardListName = route.params.flashcardListName;
   console.log("QuizScreen: flashcardListName", flashcardListName);
@@ -85,8 +86,48 @@ const QuizScreen = ({ route }) => {
     setAnswerWith(value);
   };
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = async (retakeIncorrectOnly = false, latestAttempt = null) => {
+    let incorrectIds = [];
+    if (retakeIncorrectOnly && latestAttempt) {
+      incorrectIds = Object.entries(latestAttempt.flashcardScores)
+        .filter(([_, score]) => score === 0)
+        .map(([id]) => id);
+
+      if (incorrectIds.length === 0) {
+        setErrorMessage("There are no incorrect answers to retake.");
+        return;
+      }
+      const filtered = flashcards.filter((card) => incorrectIds.includes(card.id));
+      setFlashcards(filtered);
+    }
+
     setQuizStarted(true);
+    setShowHistory(false);
+    setRetakeIncorrectOnly(false);
+  }
+
+  const handleShowHistory = async() => {
+        const user = await getCurrentUser();
+        const userEmail = user;
+        console.log("user: ", user);
+
+        // Query for the flashcardQuiz document where flashcardListId equals flashcardListName
+        console.log(
+          "QuizScreen before getDocs flashcardListName: ",
+          flashcardListName
+        );
+        const quizQuery = query(
+          collection(db, "flashcardQuiz"),
+          where("flashcardListId", "==", flashcardListName)
+        );
+
+        const quizQuerySnapshot = await getDocs(quizQuery);
+        const scores = quizQuerySnapshot.docs[0].data().scores?.[userEmail];
+        setUserScores(scores);
+        console.log("scores: ", scores);
+        console.log("userScores: ", userScores);
+    setShowHistory(true);
+    console.log("Clicked Show History");
   }
 
   useEffect(() => {
@@ -267,7 +308,7 @@ const QuizScreen = ({ route }) => {
         );
 
         const quizQuerySnapshot = await getDocs(quizQuery);
-        const scores = quizQuerySnapshot.docs[0].data().scores[userEmail];
+        const scores = quizQuerySnapshot.docs[0].data().scores?.[userEmail];
         setUserScores(scores);
         console.log("scores: ", scores);
         console.log("userScores: ", userScores);
@@ -460,93 +501,26 @@ const QuizScreen = ({ route }) => {
     );
   }
 
-  if (!quizStarted) {
-    return (
-      <Center flex={1} px="3" background={colors.surface}>
-        <VStack space={4} alignItems="center">
-
-          {errorMessage && (
-            <Box
-              backgroundColor="red.100"
-              borderColor="red.500"
-              borderWidth={1}
-              p={3}
-              mb={3}
-              borderRadius="8"
-              w="100%"
-              alignItems="center"
-            >
-              <Text color="red.600" fontWeight="bold">
-                {errorMessage}
-              </Text>
-              <Button
-                mt={2}
-                variant="outline"
-                borderColor="red.500"
-                _text={{ color: "red.500" }}
-                onPress={() => setErrorMessage(null)} // Clear error message
-              >
-                Dismiss
-              </Button>
-            </Box>
-          )}
-
-          <Text
-            style={{
-              fontSize: 24,
-              fontWeight: "bold",
-              color: colors.onSurface,
-            }}>Answer with:
-          </Text>
-          <Select
-            selectedValue={answerWith}
-            minWidth={200}
-            onValueChange={handleAnswerWithChange}
-            accessibilityLabel="Choose Answer Language"
-            placeholder="Choose Answer Language"
-            _selectedItem={{
-              _text: { fontSize: 24 },
-            }}
-          >
-            <Select.Item label={lang1} value={lang1} />
-            <Select.Item label={lang2} value={lang2} />
-          </Select>
-
-          {answerWith === "Hokkien" && (
-            <Select
-              selectedValue={hokkienOption}
-              minWidth={200}
-              onValueChange={(value) => setHokkienOption(value)}
-              accessibilityLabel="Choose Hokkien Answer Type"
-              placeholder="Choose Hokkien Answer Type"
-              _selectedItem={{
-                _text: { fontSize: 24 },
-              }}
-            >
-              <Select.Item label="Characters" value="Characters" />
-              <Select.Item label="Romanization" value="Romanization" />
-            </Select>
-          )}
-          <Button onPress={handleStartQuiz} color={colors.primaryContainer}>Start Quiz</Button>
-        </VStack>
-      </Center>
-    );
-  }
-
-  if (!flashcards.length) {
-    return (
-      <Center flex={1} px="3" background={colors.surface}>
-        <Text color={colors.onSurface}>No flashcards available</Text>
-      </Center>
-    );
-  }
-
   if (showHistory) {
     return (
       <Center flex={1} px="3" py="2" background={colors.surface}>
         <Box width="100%" height="100%">
           <ScrollView contentContainerStyle={{ paddingBottom: 20 }}>
             <VStack space={4} alignItems="stretch" width="90%" mx="auto">
+              <Button
+                mt={4}
+                colorScheme="primary"
+                onPress={() => {
+                if (userScores.length == 0) {
+                  setErrorMessage("No previous attempts available");}
+                  else {
+                  handleStartQuiz(true, userScores[userScores.length - 1]);
+                  }
+                }}
+                isDisabled={userScores.length === 0}
+              >
+                Retake Incorrect Answers
+              </Button>
 
               {errorMessage && (
                 <Box
@@ -625,6 +599,88 @@ const QuizScreen = ({ route }) => {
             </VStack>
           </ScrollView>
         </Box>
+      </Center>
+    );
+  }
+
+  if (!quizStarted) {
+    return (
+      <Center flex={1} px="3" background={colors.surface}>
+        <VStack space={4} alignItems="center">
+
+          {errorMessage && (
+            <Box
+              backgroundColor="red.100"
+              borderColor="red.500"
+              borderWidth={1}
+              p={3}
+              mb={3}
+              borderRadius="8"
+              w="100%"
+              alignItems="center"
+            >
+              <Text color="red.600" fontWeight="bold">
+                {errorMessage}
+              </Text>
+              <Button
+                mt={2}
+                variant="outline"
+                borderColor="red.500"
+                _text={{ color: "red.500" }}
+                onPress={() => setErrorMessage(null)} // Clear error message
+              >
+                Dismiss
+              </Button>
+            </Box>
+          )}
+
+          <Text
+            style={{
+              fontSize: 24,
+              fontWeight: "bold",
+              color: colors.onSurface,
+            }}>Answer with:
+          </Text>
+          <Select
+            selectedValue={answerWith}
+            minWidth={200}
+            onValueChange={handleAnswerWithChange}
+            accessibilityLabel="Choose Answer Language"
+            placeholder="Choose Answer Language"
+            _selectedItem={{
+              _text: { fontSize: 24 },
+            }}
+          >
+            <Select.Item label={lang1} value={lang1} />
+            <Select.Item label={lang2} value={lang2} />
+          </Select>
+
+          {answerWith === "Hokkien" && (
+            <Select
+              selectedValue={hokkienOption}
+              minWidth={200}
+              onValueChange={(value) => setHokkienOption(value)}
+              accessibilityLabel="Choose Hokkien Answer Type"
+              placeholder="Choose Hokkien Answer Type"
+              _selectedItem={{
+                _text: { fontSize: 24 },
+              }}
+            >
+              <Select.Item label="Characters" value="Characters" />
+              <Select.Item label="Romanization" value="Romanization" />
+            </Select>
+          )}
+          <Button onPress={handleStartQuiz} color={colors.primaryContainer}>Start Quiz</Button>
+          <Button onPress={handleShowHistory} color={colors.primaryContainer}>Show Quiz History</Button>
+        </VStack>
+      </Center>
+    );
+  }
+
+  if (!flashcards.length) {
+    return (
+      <Center flex={1} px="3" background={colors.surface}>
+        <Text color={colors.onSurface}>No flashcards available</Text>
       </Center>
     );
   }
